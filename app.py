@@ -24,7 +24,7 @@ h1,h2,h3 {color:#102d50; letter-spacing:-0.02em;}
 div[data-testid="stMetric"] {background:#f8fafc; border:1px solid #e6ebf1; border-radius:10px; padding:14px 16px;}
 .small-note {font-size:0.82rem;color:#64748b;}
 .kicker {font-size:.72rem;letter-spacing:.14em;font-weight:700;color:#64748b;text-transform:uppercase;}
-.hero {padding:6px 0 12px 0;border-bottom:1px solid #e7edf4;margin-bottom:18px;}
+.hero {padding:6px 0 12px 0;border-bottom:1px solid #e7edf4;margin-bottom:18px;}\ndiv[data-testid="stSegmentedControl"] {margin-bottom:.35rem;}
 .tag {display:inline-block;padding:3px 8px;border-radius:999px;background:#eef3f8;color:#294b70;font-size:.75rem;font-weight:600;margin-right:5px;}
 .buy {color:#0f7a4f;font-weight:700}.strong {color:#b42318;font-weight:800}
 [data-testid="stDataFrame"] {border:1px solid #e7edf4;border-radius:8px;overflow:hidden;}
@@ -72,7 +72,32 @@ state_diag=load_csv("06_H5_TOP_DECILE_STATE_DIAGNOSTICS.csv")
 curves=load_csv("07_CONDITIONAL_EXPECTATION_CURVES_2D_5D.csv")
 history=load_csv("SIGNAL_HISTORY_COMPACT.csv.gz")
 
-LANG = st.sidebar.selectbox("Language / 语言", ["English", "中文"], index=0)
+if "ui_language" not in st.session_state:
+    st.session_state.ui_language = "English"
+
+lang_left, lang_spacer = st.columns([1.2, 8.8])
+with lang_left:
+    try:
+        LANG = st.segmented_control(
+            "Language / 语言",
+            options=["English", "中文"],
+            default=st.session_state.ui_language,
+            key="language_switch",
+            label_visibility="collapsed",
+        )
+        if LANG is None:
+            LANG = st.session_state.ui_language
+    except AttributeError:
+        LANG = st.radio(
+            "Language / 语言",
+            ["English", "中文"],
+            index=0 if st.session_state.ui_language == "English" else 1,
+            horizontal=True,
+            key="language_switch_fallback",
+            label_visibility="collapsed",
+        )
+    st.session_state.ui_language = LANG
+
 ZH = LANG == "中文"
 
 def tr(en, zh):
@@ -126,7 +151,7 @@ if page=="Daily Dashboard":
     mean_score=watch["signal_score"].mean() if "signal_score" in watch else np.nan
     med_adv=watch["adv20_hkd"].median() if "adv20_hkd" in watch else np.nan
     c1,c2,c3,c4=st.columns(4)
-    c1.metric(tr("Watchlist","观察名单"), f"{topn} names")
+    c1.metric(tr("Watchlist","观察名单"), tr(f"{topn} names", f"{topn} 只"))
     c2.metric("STRONG_BUY", f"{strong}")
     c3.metric(tr("Mean signal score","平均信号分"), f"{mean_score:.1f}" if pd.notna(mean_score) else "—")
     c4.metric(tr("Median ADV20","ADV20 中位数"), hk_money(med_adv))
@@ -203,9 +228,9 @@ elif page=="Signal Explorer":
 
     st.subheader(tr("Technical setup diagnostics","技术状态诊断"))
     setup_map={
-        "setup_trend_strength":"Trend strength","setup_extension_strength":"Extension",
-        "setup_efficiency":"Efficiency","setup_breakout_strength":"Breakout",
-        "setup_volume_confirmation":"Volume confirmation","setup_acceleration":"Acceleration"
+        "setup_trend_strength":tr("Trend strength","趋势强度"),"setup_extension_strength":tr("Extension","趋势延伸"),
+        "setup_efficiency":tr("Efficiency","趋势效率"),"setup_breakout_strength":tr("Breakout","突破强度"),
+        "setup_volume_confirmation":tr("Volume confirmation","成交确认"),"setup_acceleration":tr("Acceleration","加速度")
     }
     setup=pd.DataFrame({tr("Dimension","维度"):[v for k,v in setup_map.items() if k in watch],
                         "Value":[row.get(k,np.nan) for k in setup_map if k in watch]}).dropna()
@@ -260,9 +285,9 @@ elif page=="Model Architecture":
 **5. 可交易性与输出** — U4 按市值、流动性、交易连续性、股价与成交稳定性进行过滤。合格股票每日排序，Top20 进入观察名单，Top1–5 标记为 STRONG_BUY。"""
     ))
     c1,c2,c3=st.columns(3)
-    c1.info("**Frozen H5**\n\n78-dimensional stable anchor")
-    c2.info("**97D Child**\n\n56 market regime + 41 stock state")
-    c3.info("**Final output**\n\nCross-sectional Signal Score + Top 20")
+    c1.info(tr("**Frozen H5**\n\n78-dimensional stable anchor","**Frozen H5**\n\n78维稳定锚模型"))
+    c2.info(tr("**97D Child**\n\n56 market regime + 41 stock state","**97D Child**\n\n56个市场状态 + 41个个股状态"))
+    c3.info(tr("**Final output**\n\nCross-sectional Signal Score + Top 20","**最终输出**\n\n横截面 Signal Score + Top20"))
     st.subheader(tr("Weight map","权重结构"))
     weights=pd.DataFrame({"Layer":["H5","Rank","Residual","2D","3D","4D","5D"],
                           "Weight":[45,35,20,40,30,20,10],
