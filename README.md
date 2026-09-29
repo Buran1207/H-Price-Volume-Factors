@@ -67,3 +67,8 @@ The repository intentionally excludes the trained `.joblib` model and the 100MB+
 ## Updating for future model versions
 
 The UI is tolerant of missing optional columns. Keep the stable daily output names where possible. If R1.10/R2.0 adds fields, add them to `scripts/sync_daily_outputs.py` and the relevant dashboard page without changing the daily operating workflow.
+
+
+## Bilingual UI
+
+A language selector (`Language / 语言`) is available in the sidebar. Users can switch the dashboard between English and Simplified Chinese without changing any data files.
