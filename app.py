@@ -141,14 +141,11 @@ if page=="Daily Dashboard":
         "signal_score":tr("Signal Score","信号分"),
         "selection_score":tr("Selection","选择分数"),
         "preferred_horizon_days":tr("Preferred H","偏好期限"),
-        "policy_pred_abs_return":tr("Pred. Return","预测收益"),
         "adv20_hkd":"ADV20",
         "market_cap_hkd":tr("Market Cap","市值")
     }
     keep=[c for c in rename if c in display.columns]
     table=display[keep].rename(columns=rename)
-    pred_col=tr("Pred. Return","预测收益")
-    if pred_col in table: table[pred_col]=table[pred_col].map(lambda x: pct(x))
     if "ADV20" in table: table["ADV20"]=table["ADV20"].map(hk_money)
     mcap_col=tr("Market Cap","市值")
     if mcap_col in table: table[mcap_col]=table[mcap_col].map(hk_money)
