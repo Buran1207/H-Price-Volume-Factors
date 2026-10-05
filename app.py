@@ -69,6 +69,7 @@ watch=normalize_watch(load_csv("LATEST_TOPN_WATCHLIST.csv"))
 snap=load_csv("11_DEV_VALIDATION_PER_SNAPSHOT.csv")
 ablation=load_csv("04_TRAIN_FEATURE_GROUP_ABLATION_MULTI_HORIZON.csv")
 state_diag=load_csv("06_H5_TOP_DECILE_STATE_DIAGNOSTICS.csv")
+history=normalize_watch(load_csv("SIGNAL_HISTORY_COMPACT.csv.gz"))
 
 LANG=st.sidebar.selectbox("Language / 语言",["English","中文"],index=0)
 ZH=LANG=="中文"
@@ -100,24 +101,51 @@ st.markdown(f"""<div class="hero"><div class="kicker">{tr("AAM · QUANTITATIVE R
 <h1 style="margin:.2rem 0 .25rem">{tr("V28-U R1.9 Signal Dashboard","V28-U R1.9 信号看板")}</h1>
 <div class="small-note">{tr("Latest signal date","最新信号日期")}: <b>{latest_label}</b> · {tr("Cross-sectional 2–5 day ranking system","2–5 日横截面排序系统")} · {tr("Internal team use","团队内部使用")}</div></div>""",unsafe_allow_html=True)
 
+# Historical snapshot selector shared by Daily Dashboard and Signal Explorer.
+view_watch=watch.copy()
+selected_date=None
+if page in ["Daily Dashboard","Signal Explorer"]:
+    _dates=[]
+    for _df in [history,watch]:
+        if not _df.empty and "date" in _df:
+            _dates += pd.to_datetime(_df["date"],errors="coerce").dropna().dt.strftime("%Y-%m-%d").tolist()
+    available_dates=sorted(set(_dates),reverse=True)
+    if available_dates:
+        selected_date=st.selectbox(
+            tr("Signal Date / Historical Snapshot","信号日期 / 历史快照"),
+            available_dates,index=0,
+            help=tr("Choose a historical signal date; latest remains default.","选择历史信号日期；默认仍为最新信号日。"))
+        latest_watch_date=None
+        if not watch.empty and "date" in watch:
+            _mx=pd.to_datetime(watch["date"],errors="coerce").max()
+            if pd.notna(_mx): latest_watch_date=_mx.strftime("%Y-%m-%d")
+        if selected_date==latest_watch_date:
+            view_watch=watch.copy()
+        elif not history.empty and "date" in history:
+            _hd=pd.to_datetime(history["date"],errors="coerce").dt.strftime("%Y-%m-%d")
+            view_watch=normalize_watch(history.loc[_hd.eq(selected_date)].copy())
+        if selected_date!=latest_watch_date:
+            st.info(tr("Historical Snapshot: only fields actually archived for that date are shown; missing fields are not reconstructed.",
+                       "历史快照：仅展示该日期实际归档的字段；未保存字段不会推算或补造。"))
+
 if page=="Daily Dashboard":
-    if watch.empty:st.warning(tr("No latest watchlist found.","未找到最新观察名单。"));st.stop()
-    topn=len(watch);strong=int((watch.get("signal_label",pd.Series(dtype=str))=="STRONG_BUY").sum())
-    mean_score=watch["signal_score"].mean() if "signal_score" in watch else np.nan
-    med_adv=watch["adv20_hkd"].median() if "adv20_hkd" in watch else np.nan
+    if view_watch.empty:st.warning(tr("No latest watchlist found.","未找到最新观察名单。"));st.stop()
+    topn=len(view_watch);strong=int((view_watch.get("signal_label",pd.Series(dtype=str))=="STRONG_BUY").sum())
+    mean_score=view_watch["signal_score"].mean() if "signal_score" in view_watch else np.nan
+    med_adv=view_watch["adv20_hkd"].median() if "adv20_hkd" in view_watch else np.nan
     c1,c2,c3,c4=st.columns(4)
     c1.metric(tr("Watchlist ①","观察名单 ①"),f"{topn} "+tr("names","只"))
     c2.metric("STRONG_BUY ②",f"{strong}")
     c3.metric(tr("Mean signal score ③","平均信号分 ③"),f"{mean_score:.1f}" if pd.notna(mean_score) else "—")
     c4.metric(tr("Median ADV20 ④","ADV20 中位数 ④"),hk_money(med_adv))
 
-    st.subheader(tr("Today's ranked watchlist","今日排序观察名单"))
+    st.subheader(tr("Ranked watchlist — "+(selected_date or latest_label),"排序观察名单 — "+(selected_date or latest_label)))
     rename={"watch_rank":tr("Rank ⑤","排名 ⑤"),"code":tr("Ticker ⑥","代码 ⑥"),"security_name":tr("Name ⑦","名称 ⑦"),
             "signal_label":tr("Signal ⑧","信号 ⑧"),"signal_score":tr("Signal Score ⑨","信号分 ⑨"),
             "selection_score":tr("Selection ⑩","选择分数 ⑩"),"preferred_horizon_days":tr("Preferred H ⑪","偏好期限 ⑪"),
             "adv20_hkd":"ADV20 ⑫","market_cap_hkd":tr("Market Cap ⑬","市值 ⑬")}
-    keep=[c for c in rename if c in watch.columns]
-    table=watch[keep].rename(columns=rename)
+    keep=[c for c in rename if c in view_watch.columns]
+    table=view_watch[keep].rename(columns=rename)
     if "ADV20 ⑫" in table:table["ADV20 ⑫"]=table["ADV20 ⑫"].map(hk_money)
     mc=tr("Market Cap ⑬","市值 ⑬")
     if mc in table:table[mc]=table[mc].map(hk_money)
@@ -126,16 +154,16 @@ if page=="Daily Dashboard":
     left,right=st.columns([1.15,1])
     with left:
         st.subheader(tr("Cross-horizon selection profile ⑭","跨期限选择分数 ⑭"))
-        hcols=[f"selection_score_{h}d" for h in [2,3,4,5] if f"selection_score_{h}d" in watch]
+        hcols=[f"selection_score_{h}d" for h in [2,3,4,5] if f"selection_score_{h}d" in view_watch]
         if hcols:
-            chart=watch.head(10)[["code"]+hcols].melt("code",var_name="Horizon",value_name="Score")
+            chart=view_watch.head(10)[["code"]+hcols].melt("code",var_name="Horizon",value_name="Score")
             chart["Horizon"]=chart["Horizon"].str.extract(r"(\d+d)")[0]
             fig=px.line(chart,x="Horizon",y="Score",color="code",markers=True)
             fig.update_layout(height=390,legend_title_text="Ticker",margin=dict(l=10,r=10,t=20,b=10));st.plotly_chart(fig,use_container_width=True)
     with right:
         st.subheader(tr("Signal score distribution ⑮","信号分分布 ⑮"))
-        if "signal_score" in watch:
-            fig=px.bar(watch.sort_values("signal_score"),x="signal_score",y="code",orientation="h")
+        if "signal_score" in view_watch:
+            fig=px.bar(view_watch.sort_values("signal_score"),x="signal_score",y="code",orientation="h")
             fig.update_layout(height=390,showlegend=False,margin=dict(l=10,r=10,t=20,b=10));st.plotly_chart(fig,use_container_width=True)
     notes([
       ("①",tr("Number of securities in the displayed Top20 watchlist.","当前展示的 Top20 观察名单股票数量。")),
@@ -155,9 +183,9 @@ if page=="Daily Dashboard":
     ])
 
 elif page=="Signal Explorer":
-    if watch.empty:st.warning(tr("No latest watchlist available.","暂无最新观察名单。"));st.stop()
-    ticker=st.selectbox(tr("Select security ①","选择股票 ①"),watch["code"].astype(str).tolist(),index=0)
-    row=watch[watch["code"].astype(str).eq(ticker)].iloc[0];rank=row.get("watch_rank",row.get("rank",np.nan))
+    if view_watch.empty:st.warning(tr("No latest watchlist available.","暂无最新观察名单。"));st.stop()
+    ticker=st.selectbox(tr("Select security ①","选择股票 ①"),view_watch["code"].astype(str).tolist(),index=0)
+    row=view_watch[view_watch["code"].astype(str).eq(ticker)].iloc[0];rank=row.get("watch_rank",row.get("rank",np.nan))
     a,b,c,d=st.columns(4)
     a.metric(tr("Watch rank ②","观察名单排名 ②"),f"#{int(rank)}" if pd.notna(rank) else "—")
     b.metric(tr("Signal score ③","信号分 ③"),f"{row.get('signal_score',np.nan):.1f}" if pd.notna(row.get("signal_score",np.nan)) else "—")
@@ -177,7 +205,7 @@ elif page=="Signal Explorer":
     setup_map={"setup_trend_strength":tr("Trend strength","趋势强度"),"setup_extension_strength":tr("Extension","趋势延伸"),
       "setup_efficiency":tr("Efficiency","趋势效率"),"setup_breakout_strength":tr("Breakout","突破强度"),
       "setup_volume_confirmation":tr("Volume confirmation","成交确认"),"setup_acceleration":tr("Acceleration","加速度")}
-    setup=pd.DataFrame({tr("Dimension","维度"):[v for k,v in setup_map.items() if k in watch],"Value":[row.get(k,np.nan) for k in setup_map if k in watch]}).dropna()
+    setup=pd.DataFrame({tr("Dimension","维度"):[v for k,v in setup_map.items() if k in view_watch],"Value":[row.get(k,np.nan) for k in setup_map if k in view_watch]}).dropna()
     if not setup.empty:
         fig=px.bar(setup,x=tr("Dimension","维度"),y="Value");fig.update_layout(height=330);st.plotly_chart(fig,use_container_width=True)
     notes([
