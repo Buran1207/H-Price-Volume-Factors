@@ -69,7 +69,7 @@ watch=normalize_watch(load_csv("LATEST_TOPN_WATCHLIST.csv"))
 snap=load_csv("11_DEV_VALIDATION_PER_SNAPSHOT.csv")
 ablation=load_csv("04_TRAIN_FEATURE_GROUP_ABLATION_MULTI_HORIZON.csv")
 state_diag=load_csv("06_H5_TOP_DECILE_STATE_DIAGNOSTICS.csv")
-history=normalize_watch(load_csv("SIGNAL_HISTORY_COMPACT.csv.gz"))
+history=normalize_watch(load_csv("SIGNAL_HISTORY_UNIFIED.csv.gz"))
 
 LANG=st.sidebar.selectbox("Language / 语言",["English","中文"],index=0)
 ZH=LANG=="中文"
@@ -124,9 +124,22 @@ if page in ["Daily Dashboard","Signal Explorer"]:
         elif not history.empty and "date" in history:
             _hd=pd.to_datetime(history["date"],errors="coerce").dt.strftime("%Y-%m-%d")
             view_watch=normalize_watch(history.loc[_hd.eq(selected_date)].copy())
+        evidence="LIVE SHADOW" if selected_date==latest_watch_date else None
+        if evidence is None and not view_watch.empty and "evidence_class" in view_watch:
+            _ev=view_watch["evidence_class"].dropna().astype(str).unique().tolist()
+            evidence=_ev[0] if _ev else None
+        if evidence=="TRAIN OOF":
+            st.success(tr("Evidence Class: TRAIN OOF — expanding-window out-of-fold historical prediction.",
+                          "证据类型：TRAIN OOF — 扩展窗口 Out-of-Fold 历史预测。"))
+        elif evidence=="DEV VALIDATION":
+            st.warning(tr("Evidence Class: DEV VALIDATION — development validation; not pristine blind OOS.",
+                          "证据类型：DEV VALIDATION — 开发验证；不是 pristine blind OOS。"))
+        elif evidence:
+            st.info(tr("Evidence Class: LIVE SHADOW — archived daily production/shadow signal.",
+                       "证据类型：LIVE SHADOW — 每日生产/Shadow 信号归档。"))
         if selected_date!=latest_watch_date:
-            st.info(tr("Historical Snapshot: only fields actually archived for that date are shown; missing fields are not reconstructed.",
-                       "历史快照：仅展示该日期实际归档的字段；未保存字段不会推算或补造。"))
+            st.caption(tr("Only fields actually archived for this date are shown; unavailable historical fields are not reconstructed.",
+                          "仅展示该日期实际归档字段；历史未保存字段不会推算或补造。"))
 
 if page=="Daily Dashboard":
     if view_watch.empty:st.warning(tr("No latest watchlist found.","未找到最新观察名单。"));st.stop()
